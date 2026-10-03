@@ -1,0 +1,16 @@
+{
+  "name": "clawd-friend",
+  "owner": { "name": "redemptionnn", "url": "https://github.com/redemptionnn" },
+  "metadata": {
+    "description": "Claude Friend: a tiny Clawd above your prompt who acts out whatever Claude is doing"
+  },
+  "plugins": [
+    {
+      "name": "clawd-friend",
+      "source": "./plugin",
+      "description": "A tiny Clawd above your prompt who acts out whatever Claude is doing, live: tests, commits, deploys, databases and naps",
+      "version": "1.0.0",
+      "category": "fun"
+    }
+  ]
+}

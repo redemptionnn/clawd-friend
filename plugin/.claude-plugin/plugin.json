@@ -1,0 +1,11 @@
+{
+  "name": "clawd-friend",
+  "version": "1.0.0",
+  "description": "Claude Friend: a tiny Clawd above your prompt who acts out whatever Claude is doing, live",
+  "author": { "name": "redemptionnn", "url": "https://github.com/redemptionnn" },
+  "homepage": "https://github.com/redemptionnn/clawd-friend",
+  "repository": "https://github.com/redemptionnn/clawd-friend",
+  "license": "MIT",
+  "keywords": ["mod", "buddy", "pet", "clawd", "animation", "pixel-art"],
+  "types": "./types/index.d.ts"
+}

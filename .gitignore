@@ -1,0 +1,5 @@
+# Written by Claude Code each time it loads the plugin from disk
+plugin/.claude-plugin/types/
+node_modules/
+.DS_Store
+Thumbs.db
