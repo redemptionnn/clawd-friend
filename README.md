@@ -73,6 +73,8 @@ He picks a scene from what Claude is actually doing, as it happens:
 
 ## Skins
 
+![15 skins, a name and the /friend menu](media/skins-and-names.png)
+
 Dress him up. A skin stays on through every scene and is remembered across sessions. When a scene brings its own hat (the hard hat while building, the beret while designing) that one wins for a moment, and he only holds an item while his hand is free.
 
 | Hats | | Items in hand | |
