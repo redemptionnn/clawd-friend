@@ -2,8 +2,6 @@
 
 A tiny Clawd who lives above your prompt in [Claude Code](https://claude.com/claude-code) and acts out whatever Claude is doing, live.
 
-![Claude Friend acting out a fix from first thought to deploy](media/demo.gif)
-
 He taps away at a laptop while Claude codes, reads the newspaper during a web search, watches a flask bubble while your tests run, stamps a parcel on every commit, launches a rocket when you deploy, chases a bug with a net, and nods off when you go quiet.
 
 ![Claude Friend running tests above the prompt](media/hero-testing.png)
@@ -68,8 +66,6 @@ He picks a scene from what Claude is actually doing, as it happens:
 | 💧 Oops | A turn ended on an error |
 | 😌 Chilling | Nothing going on |
 | 💤 Napping | Two quiet minutes in a row |
-
-![Claude Friend querying a database](media/hero-database.png)
 
 ## Skins
 
