@@ -44,6 +44,17 @@ export type Stats = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'clawd-friend': { scene: Scene; isOn: boolean; preview: Activity | null; place: Place }
+    'clawd-friend': {
+      scene: Scene
+      isOn: boolean
+      preview: Activity | null
+      place: Place
+      // The skin he wears: a skin id, or '' for none.
+      skin: string
+      // What he's called; greets with "<name> has arrived!".
+      name: string
+      // True for a few seconds after he arrives, while he waves hello.
+      isArriving: boolean
+    }
   }
 }

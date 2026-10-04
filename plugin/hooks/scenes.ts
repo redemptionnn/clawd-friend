@@ -1,9 +1,11 @@
 import type { Activity } from '../types'
+import { skinById } from './skins'
 
 // Every scene shares one coordinate system: 40 units tall, Clawd standing at
 // x 60..78 on the right, props to his left. A scene crops its viewBox from the
-// left only, so its right edge (and Clawd) never moves between scenes.
-const RIGHT = 84
+// left only, so its right edge (and Clawd) never moves between scenes. The
+// right edge leaves room for what he holds in his right hand.
+const RIGHT = 88
 const HEIGHT = 40
 export const SCALE = 2
 
@@ -72,7 +74,13 @@ function eyes(dx = -1, dy = 0, look = '') {
   )
 }
 
+// The skin being drawn, set by renderScene around a build. A scene's own hat
+// (the beret, the hard hat) wins over a skin's; a held item shows only while
+// his right hand is in its resting place, not busy with a prop.
+let wearing: { hat: string; hand: string } = { hat: '', hand: '' }
+
 function clawd(p: Pose = {}, shadow = SHADOW) {
+  const isHandFree = p.armR === undefined || p.armR.includes('x="78" y="24"')
   return (
     shadow +
     `<g class="${p.whole ?? ''}">` +
@@ -84,7 +92,8 @@ function clawd(p: Pose = {}, shadow = SHADOW) {
     r(60, 18, 18, 1, P.light) +
     r(60, 29, 18, 2, P.shade) +
     (p.eyes ?? eyes()) +
-    (p.hat ?? '') +
+    (p.hat ?? wearing.hat) +
+    (isHandFree ? wearing.hand : '') +
     `</g></g>`
   )
 }
@@ -993,21 +1002,69 @@ const BUILDERS: Record<Activity, () => Built> = {
   oops,
 }
 
-const cache = new Map<Activity, { source: string; width: number; height: number }>()
+// He waves hello with a speech bubble: "<name> has arrived!".
+function hello(name: string): Built {
+  const text = `${name} has arrived!`
+  const safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  // System-ui at 3.6 units runs about 2 units a character.
+  const w = Math.max(16, text.length * 2.05 + 6)
+  const right = 55.5
+  const left = right - w
+  const bubble =
+    `<path d="M${right - 4} 15.4L56.6 19.6L${right - 7.4} 15.6Z" fill="#FFFFFF" stroke="${P.outline}" stroke-width=".6" stroke-linejoin="round"/>` +
+    r(left, 5.6, w, 10, '#FFFFFF', `rx="3.4" stroke="${P.outline}" stroke-width=".6"`) +
+    r(right - 7.6, 14.8, 4.4, 1.2, '#FFFFFF') +
+    `<text x="${left + w / 2}" y="11.9" font-family="system-ui,'Segoe UI',sans-serif" font-size="3.6" font-weight="700" fill="${P.ink}" text-anchor="middle">${safe}</text>`
+  return {
+    x: Math.min(48, Math.floor(left - 1.5)),
+    css: `.wave{animation:wave .9s ease-in-out infinite;transform-origin:100% 50%}
+@keyframes wave{0%,100%{transform:rotate(38deg)}50%{transform:rotate(66deg)}}
+.pop{animation:pop .45s cubic-bezier(.3,1.6,.6,1) both;transform-origin:100% 100%}
+@keyframes pop{0%{transform:scale(.2);opacity:0}100%{transform:scale(1);opacity:1}}
+.hop{animation:hop 1.8s ease-in-out infinite}
+@keyframes hop{0%,60%,100%{transform:translateY(0)}70%{transform:translateY(-1px)}80%{transform:translateY(0)}}`,
+    body:
+      `<g class="pop">${bubble}</g>` +
+      clawd({
+        whole: 'hop',
+        eyes: eyes(0, -0.4),
+        armL: `<g class="wave">${r(53.5, 21, 6.5, 2.6, P.body)}</g>`,
+      }),
+  }
+}
 
-export function renderScene(activity: Activity) {
-  const hit = cache.get(activity)
+type Rendered = { source: string; width: number; height: number }
+
+function toSvg(build: () => Built, skinId: string): Rendered {
+  const skin = skinById(skinId)
+  wearing = { hat: skin?.kind === 'hat' ? skin.svg : '', hand: skin?.kind === 'hand' ? skin.svg : '' }
+  try {
+    const built = build()
+    const w = RIGHT - built.x
+    const source =
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${built.x} 0 ${w} ${HEIGHT}" width="${w * SCALE}" height="${HEIGHT * SCALE}">` +
+      `<style>${BASE_CSS}${built.css ?? ''}${skin?.css ?? ''}</style>` +
+      built.body +
+      `</svg>`
+    return { source, width: w * SCALE, height: HEIGHT * SCALE }
+  } finally {
+    wearing = { hat: '', hand: '' }
+  }
+}
+
+const cache = new Map<string, Rendered>()
+
+export function renderScene(activity: Activity, skinId = ''): Rendered {
+  const key = `${activity}|${skinId}`
+  const hit = cache.get(key)
   if (hit) return hit
-  const built = BUILDERS[activity]()
-  const w = RIGHT - built.x
-  const source =
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${built.x} 0 ${w} ${HEIGHT}" width="${w * SCALE}" height="${HEIGHT * SCALE}">` +
-    `<style>${BASE_CSS}${built.css ?? ''}</style>` +
-    built.body +
-    `</svg>`
-  const out = { source, width: w * SCALE, height: HEIGHT * SCALE }
-  cache.set(activity, out)
+  const out = toSvg(BUILDERS[activity], skinId)
+  cache.set(key, out)
   return out
+}
+
+export function renderHello(name: string, skinId = ''): Rendered {
+  return toSvg(() => hello(name), skinId)
 }
 
 export const ACTIVITIES = Object.keys(BUILDERS) as Activity[]

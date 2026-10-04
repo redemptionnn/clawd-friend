@@ -2,6 +2,8 @@
 
 A tiny Clawd who lives above your prompt in [Claude Code](https://claude.com/claude-code) and acts out whatever Claude is doing, live.
 
+![Claude Friend acting out a fix from first thought to deploy](media/demo.gif)
+
 He taps away at a laptop while Claude codes, reads the newspaper during a web search, watches a flask bubble while your tests run, stamps a parcel on every commit, launches a rocket when you deploy, chases a bug with a net, and nods off when you go quiet.
 
 ![Claude Friend running tests above the prompt](media/hero-testing.png)
@@ -69,12 +71,41 @@ He picks a scene from what Claude is actually doing, as it happens:
 
 ![Claude Friend querying a database](media/hero-database.png)
 
+## Skins
+
+Dress him up. A skin stays on through every scene and is remembered across sessions. When a scene brings its own hat (the hard hat while building, the beret while designing) that one wins for a moment, and he only holds an item while his hand is free.
+
+| Hats | | Items in hand | |
+| --- | --- | --- | --- |
+| 👑 `/friend crown` | 🎩 `/friend tophat` | ☕ `/friend coffee` | 🪄 `/friend wand` |
+| 🧙 `/friend wizard` | 🧢 `/friend beanie` | 🗡️ `/friend sword` | 🌸 `/friend flower` |
+| 🤠 `/friend cowboy` | 🎧 `/friend headphones` | 🎈 `/friend balloon` | |
+| ⚔️ `/friend viking` | 😇 `/friend halo` | | |
+| 🥳 `/friend party` | 🎃 `/friend pumpkin` | | |
+
+`/friend skins` shows them all in a gallery (click one to put it on), and `/friend noskin` takes it off.
+
+## Give him a name
+
+```
+/friend name Bob
+```
+
+From then on he greets you with a little speech bubble, "Bob has arrived!", whenever you call him or start a session.
+
 ## Commands
+
+Not sure what's there? `/friend menu` lists everything, with buttons in the desktop app.
 
 | Command | What it does |
 | --- | --- |
-| `/friend` | Show or hide your friend |
-| `/friend on` / `/friend off` | Show or hide him for good (remembered across sessions) |
+| `/friend` | Call your friend, or send him off if he's already here (remembered across sessions) |
+| `/friend menu` | Every command, with buttons |
+| `/friend skins` | The skin gallery; click one to wear it |
+| `/friend <skin>` | Wear a skin, e.g. `/friend crown` or `/friend sword` |
+| `/friend noskin` | Take the skin off |
+| `/friend name <name>` | Give him a name (up to 16 characters) |
+| `/friend scenes` | Every scene, with buttons to play them |
 | `/friend <scene>` | Play any scene for a few seconds, e.g. `/friend deploy` or `/friend build` |
 | `/friend pane` | Move him into a side pane |
 | `/friend stage` | Put him back above the prompt |
@@ -123,7 +154,7 @@ claude plugin validate ./plugin
 claude plugin test ./plugin
 ```
 
-The tests in [`plugin/tests/scenes.test.ts`](plugin/tests/scenes.test.ts) run real tool calls through Claude Code's engine, draw the band while each call is in flight, and check that the right scene shows.
+The tests in [`plugin/tests/scenes.test.ts`](plugin/tests/scenes.test.ts) run real tool calls through Claude Code's engine, draw the band while each call is in flight, and check that the right scene shows. [`plugin/tests/skins.test.ts`](plugin/tests/skins.test.ts) covers skins, names and the menu cards.
 
 ## Good to know
 
@@ -140,9 +171,10 @@ plugin/
   hooks/register.tsx              the hooks: what Claude is doing, commands, drawing
   hooks/classify.ts               tool calls to scenes
   hooks/scenes.ts                 the 23 scenes, drawn as SVG in code
+  hooks/skins.ts                  hats and items in hand
   types/index.d.ts                the plugin's state contract
-  tests/scenes.test.ts            claude plugin test
-media/                            screenshots
+  tests/                          claude plugin test
+media/                            the demo GIF and screenshots
 ```
 
 ## License

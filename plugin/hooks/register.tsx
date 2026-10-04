@@ -3,7 +3,8 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Activity, Place, Scene, Stats } from '../types'
 import { classify } from './classify'
-import { ACTIVITIES, renderScene } from './scenes'
+import { ACTIVITIES, renderHello, renderScene } from './scenes'
+import { SKINS, skinById } from './skins'
 
 const scene = atom({ plugin: 'clawd-friend', key: 'scene' } as const, {
   activity: 'idle',
@@ -13,9 +14,15 @@ const scene = atom({ plugin: 'clawd-friend', key: 'scene' } as const, {
 const isOn = atom({ plugin: 'clawd-friend', key: 'isOn' } as const, true)
 const preview = atom({ plugin: 'clawd-friend', key: 'preview' } as const, null as Activity | null)
 const place = atom({ plugin: 'clawd-friend', key: 'place' } as const, 'stage' as Place)
+const skin = atom({ plugin: 'clawd-friend', key: 'skin' } as const, '')
+const friendName = atom({ plugin: 'clawd-friend', key: 'name' } as const, 'Clawd')
+const isArriving = atom({ plugin: 'clawd-friend', key: 'isArriving' } as const, false)
 
 const PANE = 'friend'
 const PREVIEW_MS = 6_000
+const ARRIVAL_MS = 4_500
+const DEFAULT_NAME = 'Clawd'
+const NAME_MAX = 16
 
 const LABELS: Record<Activity, string> = {
   idle: 'is chilling',
@@ -127,6 +134,7 @@ function partialInput(json: string): Record<string, unknown> {
 let shown = ''
 let timer: Timer | undefined
 let previewTimer: Timer | undefined
+let arrivalTimer: Timer | undefined
 let stats: Stats | undefined
 const running = new Map<string, Scene>()
 
@@ -168,8 +176,43 @@ async function openPane($: EngineInterface) {
 
 async function startPreview($: EngineInterface, activity: Activity) {
   previewTimer?.cancel()
+  arrivalTimer?.cancel()
+  await update($, isArriving, () => false)
   await update($, preview, () => activity)
   previewTimer = $.clock.after(PREVIEW_MS, () => void update($, preview, () => null))
+}
+
+// He waves hello with "<name> has arrived!" for a few seconds.
+async function arrive($: EngineInterface) {
+  arrivalTimer?.cancel()
+  await update($, isArriving, () => true)
+  arrivalTimer = $.clock.after(ARRIVAL_MS, () => void update($, isArriving, () => false))
+}
+
+async function setSkin($: EngineInterface, id: string) {
+  await update($, skin, () => id)
+  await $.store.set('skin', id)
+}
+
+// Names are drawn in his speech bubble: keep them short and plain.
+function cleanName(raw: string) {
+  return raw
+    .replace(/[<>&"\\\u0000-\u001f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, NAME_MAX)
+}
+
+async function setName($: EngineInterface, value: string) {
+  await update($, friendName, () => value)
+  await $.store.set('name', value)
+}
+
+// Shows him if he is hidden, and greets you either way.
+async function callFriend($: EngineInterface) {
+  await setOn($, true)
+  if ((await read($, place)) === 'pane') await openPane($)
+  await arrive($)
 }
 
 // ── Stats ────────────────────────────────────────────────────────────────
@@ -231,15 +274,61 @@ function statsText(s: Stats) {
   ].join('\n')
 }
 
-const HELP = [
-  'Usage: /friend [on | off | pane | stage | stats | <scene>]',
-  '  /friend          show or hide your friend',
-  '  /friend pane     move him into a side pane',
-  '  /friend stage    put him back above the prompt',
-  '  /friend stats    what he saw today',
-  '  /friend <scene>  play a scene for a few seconds',
-  `Scenes: ${ACTIVITIES.join(', ')}`,
-].join('\n')
+// Every command, as the menu lists it.
+const COMMANDS: [command: string, what: string][] = [
+  ['/friend', 'call your friend, or send him off if he is here'],
+  ['/friend menu', 'this menu'],
+  ['/friend skins', 'pick a hat or something for his hand'],
+  ['/friend <skin>', 'wear a skin, e.g. /friend crown (/friend noskin takes it off)'],
+  ['/friend name <name>', 'give him a name, e.g. /friend name Bob'],
+  ['/friend scenes', 'every scene he can play'],
+  ['/friend <scene>', 'play a scene for a few seconds, e.g. /friend deploy'],
+  ['/friend stats', 'what he saw today'],
+  ['/friend pane', 'move him into a side pane (/friend stage brings him back)'],
+]
+
+// What each scene is called in the scenes list.
+const SCENE_NAMES: Record<Activity, string> = {
+  idle: '😌 chilling',
+  sleep: '💤 napping',
+  thinking: '💭 thinking',
+  writing: '⌨️ writing',
+  coding: '💻 coding',
+  web: '📰 web search',
+  reading: '🔍 reading',
+  bash: '⚡ commands',
+  agents: '🐾 subagents',
+  todo: '📋 planning',
+  ask: '👋 asking',
+  browser: '🌐 browsing',
+  testing: '🧪 tests',
+  commit: '📦 commit',
+  deploy: '🚀 deploy',
+  waiting: '🪧 needs your OK',
+  debugging: '🐞 debugging',
+  memory: '📔 memory',
+  database: '🗄️ database',
+  design: '🎨 design',
+  build: '🧱 build',
+  done: '🎉 done',
+  oops: '💧 oops',
+}
+
+function menuText(name: string) {
+  return [`**${name}** · Claude Friend`, '', ...COMMANDS.map(([cmd, what]) => `- \`${cmd}\`: ${what}`)].join('\n')
+}
+
+function skinsText(current: string) {
+  const line = (kind: 'hat' | 'hand') =>
+    SKINS.filter(s => s.kind === kind)
+      .map(s => `${s.emoji} \`/friend ${s.id}\`${s.id === current ? ' (wearing)' : ''}`)
+      .join('  ')
+  return ['**Skins**', '', `Hats: ${line('hat')}`, '', `In his hand: ${line('hand')}`, '', 'Take it off with `/friend noskin`.'].join('\n')
+}
+
+function scenesText() {
+  return ['**Scenes** (play one with `/friend <scene>`)', '', ACTIVITIES.map(a => `\`${a}\` ${SCENE_NAMES[a]}`).join(' · ')].join('\n')
+}
 
 // ── Drawing ──────────────────────────────────────────────────────────────
 
@@ -252,35 +341,111 @@ async function currentActivity($: EngineInterface, isWorking: boolean) {
   return now
 }
 
+// What to draw right now: the hello wave while he arrives, else a played
+// scene, else what Claude is doing. isWorking is null where the surface
+// doesn't say (the pane), so the scene is drawn as it stands.
+async function friendLook($: EngineInterface, isWorking: boolean | null) {
+  const wearingId = await read($, skin)
+  const worn = skinById(wearingId)
+  if (await read($, isArriving)) {
+    const name = await read($, friendName)
+    return {
+      art: renderHello(name, wearingId),
+      alt: `${name} has arrived!`,
+      glyph: `👋 ${name} has arrived! (•‿•)/${worn ? ` ${worn.emoji}` : ''}`,
+    }
+  }
+  let now: Scene
+  if (isWorking === null) {
+    const shownPreview = await read($, preview)
+    now = shownPreview ? { activity: shownPreview, detail: '' } : await read($, scene)
+  } else {
+    now = await currentActivity($, isWorking)
+  }
+  return {
+    art: renderScene(now.activity, wearingId),
+    // Only the character shows; the label lives on for screen readers.
+    alt: `Claude ${LABELS[now.activity]}${now.detail ? `: ${now.detail}` : ''}`,
+    glyph: `${GLYPHS[now.activity]}${worn ? ` ${worn.emoji}` : ''}`,
+  }
+}
+
+async function moveTo($: EngineInterface, where: Place) {
+  await setOn($, true)
+  await setPlace($, where)
+  if (where === 'pane') await openPane($)
+  else await $.ui.close({ id: PANE })
+}
+
+async function wearSkin($: EngineInterface, id: string) {
+  await setSkin($, id)
+  await setOn($, true)
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'friend',
-      description: 'Your friend above the prompt: show, hide, move, stats or play a scene',
-      argumentHint: '[on|off|pane|stage|stats|<scene>]',
+      description: 'Call or send off your friend; /friend menu shows everything else',
+      argumentHint: '[menu|skins|scenes|name <name>|<skin>|<scene>|stats|pane]',
     })
     const savedOn = await $.store.get('isOn')
     const savedPlace = await $.store.get('place')
+    const savedSkin = await $.store.get('skin')
+    const savedName = await $.store.get('name')
     await update($, isOn, () => savedOn !== false)
     await update($, place, () => (savedPlace === 'pane' ? 'pane' : 'stage'))
     await update($, preview, () => null)
+    await update($, skin, () => (typeof savedSkin === 'string' && skinById(savedSkin) ? savedSkin : ''))
+    await update($, friendName, () => (typeof savedName === 'string' && cleanName(savedName)) || DEFAULT_NAME)
     await loadStats($)
     await show($, 'idle')
-    if (savedPlace === 'pane' && savedOn !== false) void openPane($)
+    if (savedOn !== false) {
+      if (savedPlace === 'pane') void openPane($)
+      await arrive($)
+    }
     return next(e)
   })
 
   on('command.run', { command: 'friend' }, async ($, e) => {
-    const arg = e.args.trim().toLowerCase()
+    const raw = e.args.trim()
+    const arg = raw.toLowerCase()
+    const name = await read($, friendName)
 
+    // /friend calls him, or sends him off if he is already here.
     if (arg === '' || arg === 'on' || arg === 'off') {
       const value = arg === 'on' ? true : arg === 'off' ? false : !(await read($, isOn))
-      await setOn($, value)
-      if ((await read($, place)) === 'pane') {
-        if (value) await openPane($)
-        else await $.ui.close({ id: PANE })
+      if (value) {
+        await callFriend($)
+        return { text: `👋 ${name} has arrived!` }
       }
-      return { text: value ? 'Your friend is back.' : 'Your friend is hidden. /friend brings him back.' }
+      await setOn($, false)
+      if ((await read($, place)) === 'pane') await $.ui.close({ id: PANE })
+      return { text: `${name} went for a walk. /friend calls them back.` }
+    }
+
+    if (arg === 'menu' || arg === 'help') return { text: menuText(name) }
+    if (arg === 'skins' || arg === 'skin') return { text: skinsText(await read($, skin)) }
+    if (arg === 'scenes') return { text: scenesText() }
+
+    if (arg === 'name' || arg.startsWith('name ')) {
+      const wanted = cleanName(raw.slice(4))
+      if (!wanted) return { text: `Your friend is called ${name}. Rename them with /friend name <name>, e.g. /friend name Bob.` }
+      await setName($, wanted)
+      await callFriend($)
+      return { text: `Nice to meet you! Your friend is now called ${wanted}.` }
+    }
+
+    if (arg === 'noskin' || arg === 'none') {
+      await setSkin($, '')
+      return { text: `${name} took the skin off.` }
+    }
+
+    const chosen = skinById(arg)
+    if (chosen) {
+      await setSkin($, chosen.id)
+      await callFriend($)
+      return { text: `${chosen.emoji} ${name} is wearing the ${chosen.label.toLowerCase()}.` }
     }
 
     if (arg === 'pane') {
@@ -313,7 +478,7 @@ export const register: Register = on => {
       return { text: `Playing "${arg}" for a few seconds.` }
     }
 
-    return { text: `Unknown option "${arg}".\n${HELP}` }
+    return { text: `There's no "${raw}" yet.\n\n${menuText(name)}` }
   })
 
   // The person closed the pane from its own mark: go back to the stage.
@@ -420,24 +585,21 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey || !(await read($, isOn)) || (await read($, place)) === 'pane') return next(e)
 
-    const { activity, detail } = await currentActivity($, e.props.isWorking)
-    // Only the character shows; the label lives on for screen readers.
-    const alt = `Claude ${LABELS[activity]}${detail ? `: ${detail}` : ''}`
+    const look = await friendLook($, e.props.isWorking)
 
     if (e.surface === 'terminal') {
       const { Box, Text } = $.ui.resolve(e)
       return (
         <Box flexDirection="row" justifyContent="flex-end">
-          <Text color="#D97757">{GLYPHS[activity]}</Text>
+          <Text color="#D97757">{look.glyph}</Text>
         </Box>
       )
     }
 
     const { Box, Svg } = $.ui.resolve(e)
-    const art = renderScene(activity)
     return (
       <Box flexDirection="row" justifyContent="flex-end">
-        <Svg source={art.source} alt={alt} width={art.width} height={art.height} />
+        <Svg source={look.art.source} alt={look.alt} width={look.art.width} height={look.art.height} />
       </Box>
     )
   })
@@ -445,26 +607,110 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     // The pane has no isWorking flag of its own; the scene state already
     // follows the turn, so draw it as it stands.
-    const shownPreview = await read($, preview)
-    const now = await read($, scene)
-    const activity = shownPreview ?? now.activity
-    const detail = shownPreview ? '' : now.detail
-    const alt = `Claude ${LABELS[activity]}${detail ? `: ${detail}` : ''}`
+    const look = await friendLook($, null)
 
     if (e.surface === 'terminal') {
       const { Box, Text } = $.ui.resolve(e)
       return (
         <Box flexDirection="column" alignItems="center">
-          <Text color="#D97757">{GLYPHS[activity]}</Text>
+          <Text color="#D97757">{look.glyph}</Text>
         </Box>
       )
     }
 
     const { Box, Svg } = $.ui.resolve(e)
-    const art = renderScene(activity)
     return (
       <Box flexDirection="column" alignItems="center">
-        <Svg source={art.source} alt={alt} width={art.width} height={art.height} />
+        <Svg source={look.art.source} alt={look.alt} width={look.art.width} height={look.art.height} />
+      </Box>
+    )
+  })
+
+  // /friend menu, skins and scenes print text the model reads; on surfaces that
+  // draw pictures, the row is drawn as a card with buttons instead.
+  on('ui.render', { component: 'CommandOutput', props: { command: 'friend' } }, async ($, e, next) => {
+    const arg = e.props.args.trim().toLowerCase()
+    const isCard = ['menu', 'help', 'skins', 'skin', 'scenes'].includes(arg)
+    if (!isCard || e.props.isErrored || e.surface === 'terminal') return next(e)
+
+    const { Box, Text, Button, Svg } = $.ui.resolve(e)
+    const name = await read($, friendName)
+    const isHere = await read($, isOn)
+    const wearing = await read($, skin)
+
+    if (arg === 'menu' || arg === 'help') {
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text bold>
+            {name} <Text color="#D97757">· Claude Friend</Text>
+          </Text>
+          <Box flexDirection="row" flexWrap="wrap" gap={1}>
+            <Button
+              key="toggle"
+              label={isHere ? 'Send off' : 'Call'}
+              variant="primary"
+              onPress={() => void (isHere ? setOn($, false) : callFriend($))}
+            />
+            <Button key="hello" label="Say hello" onPress={() => void callFriend($)} />
+            <Button key="pane" label="Side pane" onPress={() => void moveTo($, 'pane')} />
+            <Button key="stage" label="Above the prompt" onPress={() => void moveTo($, 'stage')} />
+          </Box>
+          <Box flexDirection="column">
+            {COMMANDS.map(([cmd, what]) => (
+              <Text key={cmd}>
+                <Text color="#D97757">{cmd}</Text>
+                <Text dimColor> {what}</Text>
+              </Text>
+            ))}
+          </Box>
+        </Box>
+      )
+    }
+
+    if (arg === 'skins' || arg === 'skin') {
+      const cell = (id: string, label: string) => {
+        const art = renderScene('idle', id)
+        const isWorn = wearing === id
+        return (
+          <Box key={`skin-${id || 'none'}`} flexDirection="column" alignItems="center" width={16}>
+            <Svg source={art.source} alt={label} width={Math.round(art.width * 0.7)} height={Math.round(art.height * 0.7)} />
+            <Button
+              key={`wear-${id || 'none'}`}
+              label={isWorn ? `✓ ${label}` : label}
+              variant={isWorn ? 'primary' : 'secondary'}
+              onPress={() => void wearSkin($, id)}
+            />
+          </Box>
+        )
+      }
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text bold>
+            Skins for {name} <Text dimColor>· click one to wear it, or type /friend crown</Text>
+          </Text>
+          <Text dimColor>Hats</Text>
+          <Box flexDirection="row" flexWrap="wrap" gap={1}>
+            {SKINS.filter(s => s.kind === 'hat').map(s => cell(s.id, `${s.emoji} ${s.label}`))}
+          </Box>
+          <Text dimColor>In his hand</Text>
+          <Box flexDirection="row" flexWrap="wrap" gap={1}>
+            {SKINS.filter(s => s.kind === 'hand').map(s => cell(s.id, `${s.emoji} ${s.label}`))}
+            {cell('', 'No skin')}
+          </Box>
+        </Box>
+      )
+    }
+
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text bold>
+          Scenes <Text dimColor>· click one to play it, or type /friend deploy</Text>
+        </Text>
+        <Box flexDirection="row" flexWrap="wrap" gap={1}>
+          {ACTIVITIES.map(a => (
+            <Button key={`play-${a}`} label={SCENE_NAMES[a]} onPress={() => void startPreview($, a)} />
+          ))}
+        </Box>
       </Box>
     )
   })
